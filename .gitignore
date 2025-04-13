@@ -1,0 +1,8 @@
+# Excluir todos los archivos de Excel
+*.xls
+*.xlsx
+*.xlsm
+
+# Opcional: Excluir también archivos temporales de Excel
+~$*.xls*
+*.xlk

@@ -27,7 +27,7 @@ driver = webdriver.Chrome(service=service, options=chrome_options)
 def enviar_mensaje(numero, nombre):
     try:
         # Paso 1: Buscar contacto mediante la barra de búsqueda
-        search_box = WebDriverWait(driver, 20).until(
+        search_box = WebDriverWait(driver, 10).until( #ORIGINALMENTE 20
             EC.presence_of_element_located((By.XPATH, '//div[@contenteditable="true"][@data-tab="3"]'))
         )
         
@@ -40,7 +40,7 @@ def enviar_mensaje(numero, nombre):
 
         # Paso 2: Seleccionar chat correcto
         try:
-            WebDriverWait(driver, 10).until(
+            WebDriverWait(driver, 5).until( #ORIGINALMENTE 10
                 EC.presence_of_element_located((By.XPATH, f'//span[@title="{numero}"]'))
             ).click()
         except:
@@ -48,7 +48,7 @@ def enviar_mensaje(numero, nombre):
             driver.get(f"https://web.whatsapp.com/send?phone={numero}")
         
         # Paso 3: Enviar mensaje
-        input_box = WebDriverWait(driver, 15).until(
+        input_box = WebDriverWait(driver, 10).until( #ORIGINALMENTE 15
             EC.presence_of_element_located((By.XPATH, '//div[@contenteditable="true"][@data-tab="10"]'))
         )
         
