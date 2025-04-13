@@ -2,7 +2,6 @@
 *.xls
 *.xlsx
 *.xlsm
-
-# Opcional: Excluir también archivos temporales de Excel
 ~$*.xls*
 *.xlk
+errores/
