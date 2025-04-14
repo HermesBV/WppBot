@@ -2,7 +2,6 @@ import os
 import openpyxl
 import time
 import random
-import requests
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -16,7 +15,16 @@ from openpyxl.styles import PatternFill
 # Configuración
 ARCHIVO_EXCEL = "contactos.xlsx"
 CARPETA_ERRORES = "errores"
-MENSAJE_BASE = "Hola {nombre}, este es un mensaje automático enviado a través de un bot de wpp, el mismo fue desarrollado por Mr. Fucking Good Vibes"
+MENSAJE_BASE = """Hola {nombre}!
+Te hablo desde el S.O.S por la recorrida para ingresantes en Económicas (Av. Córdoba 2122) a la que te anotaste.
+Es este *martes a las 18hrs*. El punto de encuentro va a ser en nuestra mesita, entrando por la puerta principal a la izquierda.
+Igualmente va a haber estudiantes en la entrada con la remera verde del S.O.S para indicarte cómo llegar.
+Cualquier cosa avisame, saludos!"""
+MENSAJE_SIN_NOMBRE = """Hola!
+Te hablo desde el S.O.S por la recorrida para ingresantes en Económicas (Av. Córdoba 2122) a la que te anotaste.
+Es este *martes a las 18hrs*. El punto de encuentro va a ser en nuestra mesita, entrando por la puerta principal a la izquierda.
+Igualmente va a haber estudiantes en la entrada con la remera verde del S.O.S para indicarte cómo llegar.
+Cualquier cosa avisame, saludos!"""
 COLOR_ERROR = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
 
 # Crear carpeta de errores si no existe
@@ -45,29 +53,31 @@ def enviar_mensaje(numero, nombre):
     try:
         driver.get(f"https://web.whatsapp.com/send?phone={numero}")
         
-        input_box = WebDriverWait(driver, 25).until(
+        input_box = WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.XPATH, '//div[@role="textbox"][@contenteditable="true"][@data-tab="10"]'))
         )
         
-        mensaje = MENSAJE_BASE.format(nombre=nombre)
-        input_box.send_keys(mensaje)
+        # Mensaje con nombre o genérico (respeta saltos de línea)
+        if nombre and nombre.strip():
+            mensaje = MENSAJE_BASE.format(nombre=nombre.strip())
+        else:
+            mensaje = MENSAJE_SIN_NOMBRE
+        
+        # Envía el mensaje línea por línea (para respetar formatos)
+        for line in mensaje.split('\n'):
+            input_box.send_keys(line)
+            input_box.send_keys(Keys.SHIFT + Keys.ENTER)  # Salto de línea sin enviar
+        input_box.send_keys(Keys.ENTER)  # Envía el mensaje completo
         
         WebDriverWait(driver, 10).until(
-            lambda d: mensaje in input_box.text
+            lambda d: mensaje.replace('\n', '') in input_box.text.replace('\n', '')
         )
         
-        input_box.send_keys(Keys.ENTER)
-        
         try:
-            WebDriverWait(driver, 15).until(
+            WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.XPATH, '//span[@data-testid="msg-dblcheck" or @data-testid="msg-time"]'))
             )
-            
-            WebDriverWait(driver, 10).until(
-                EC.text_to_be_present_not_in_element((By.XPATH, '//div[@data-tab="10"]'), mensaje)
-            )
-            
-            print(f"✓✓ Envío confirmado a {nombre}")
+            print(f"✓✓ Envío confirmado a {numero}")
             return True
             
         except Exception as e:
@@ -91,11 +101,13 @@ try:
     if hoja.cell(row=1, column=3).value != "Estado":
         hoja.cell(row=1, column=3, value="Estado")
     
+    contador = 0
+    
     for fila_idx, fila in enumerate(hoja.iter_rows(min_row=2, values_only=True), start=2):
         numero = str(fila[0]).strip().replace(" ", "").replace("-", "")
-        nombre = str(fila[1]).strip()
+        nombre = str(fila[1]).strip() if fila[1] else ""
         
-        if not numero or not nombre:
+        if not numero:
             marcar_error(fila_idx, hoja)
             continue
             
@@ -108,7 +120,14 @@ try:
             marcar_error(fila_idx, hoja)
         
         wb.save(ARCHIVO_EXCEL)
-        time.sleep(random.uniform(8, 15))
+        contador += 1
+        
+        # Pausa cada 50 mensajes (5 minutos)
+        if contador % 50 == 0:
+            print(f"⏳ Pausa de 5 minutos después de {contador} mensajes...")
+            time.sleep(300)  # 300 segundos = 5 minutos
+        else:
+            time.sleep(random.uniform(6, 12))  # Delay aleatorio entre 6-12s
 
 finally:
     try:
