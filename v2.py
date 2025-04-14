@@ -12,18 +12,8 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.options import Options
 from openpyxl.styles import PatternFill
 
-# Configuración
-ARCHIVO_EXCEL = "contactos.xlsx"
-MENSAJE_BASE = """Hola {nombre}!
-Te hablo desde el S.O.S por la recorrida para ingresantes en Económicas (Av. Córdoba 2122) a la que te anotaste.
-Es mañana *martes a las 18hrs*. El punto de encuentro va a ser en nuestra mesita, entrando por la puerta principal a la izquierda.
-Igualmente va a haber estudiantes en la entrada con la remera verde del S.O.S para indicarte cómo llegar.
-Cualquier cosa avisame, saludos!"""
-MENSAJE_SIN_NOMBRE = """Hola!
-Te hablo desde el S.O.S por la recorrida para ingresantes en Económicas (Av. Córdoba 2122) a la que te anotaste.
-Es mañana *martes a las 18hrs*. El punto de encuentro va a ser en nuestra mesita, entrando por la puerta principal a la izquierda.
-Igualmente va a haber estudiantes en la entrada con la remera verde del S.O.S para indicarte cómo llegar.
-Cualquier cosa avisame, saludos!"""
+# Configuración 
+ARCHIVO_CONFIG = "config.xlsx"  
 COLOR_ERROR = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
 
 # Configuración de Chrome
@@ -54,29 +44,44 @@ def validar_numero(numero):
     numero = str(numero).strip().replace(" ", "").replace("-", "")
     if not numero:
         return False
-    if len(numero) < 8:  # Número mínimo incluyendo código de país
+    if len(numero) < 8:
         return False
     return numero if numero.startswith("+") else f"+{numero}"
 
-def enviar_mensaje(numero, nombre):
+def cargar_mensajes(wb):
+    if "Mensajes" not in wb.sheetnames:
+        raise ValueError("No existe la hoja 'Mensajes'")
+    
+    hoja_mensajes = wb["Mensajes"]
+    
+    mensaje_base = hoja_mensajes['B1'].value
+    mensaje_sin_nombre = hoja_mensajes['B2'].value
+    
+    if not mensaje_base or not mensaje_sin_nombre:
+        raise ValueError("Celdas B1 o B2 vacías en hoja 'Mensajes'")
+    
+    return mensaje_base, mensaje_sin_nombre
+
+def enviar_mensaje(numero, nombre, mensaje_base, mensaje_sin_nombre):
     try:
         driver.get(f"https://web.whatsapp.com/send?phone={numero}")
         
-        # Esperar carga de la conversación
         input_box = WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.XPATH, '//div[@role="textbox"][@data-tab="10"]'))
         )
         
-        # Construir mensaje
-        mensaje = MENSAJE_BASE.format(nombre=nombre.strip()) if nombre.strip() else MENSAJE_SIN_NOMBRE
+        if nombre and nombre.strip():
+            mensaje = mensaje_base.format(nombre=nombre.strip())
+        else:
+            mensaje = mensaje_sin_nombre
         
-        # Enviar mensaje
-        for line in mensaje.split('\n'):
-            input_box.send_keys(line)
+        lineas = mensaje.split('\n')
+        
+        for linea in lineas:
+            input_box.send_keys(linea)
             input_box.send_keys(Keys.SHIFT + Keys.ENTER)
         input_box.send_keys(Keys.ENTER)
         
-        # Verificación de envío
         try:
             WebDriverWait(driver, 12).until(
                 EC.presence_of_element_located((By.XPATH, '//span[@data-testid="msg-dblcheck" or @data-testid="msg-time"]'))
@@ -84,8 +89,7 @@ def enviar_mensaje(numero, nombre):
             print(f"✓✓ Envío confirmado a {numero}")
             return True
         except:
-            # Verificar si el mensaje persiste en el input (envío fallido)
-            if mensaje.split('\n')[0] in input_box.text:
+            if lineas[0] in input_box.text:
                 print(f"✗ Error de envío a {numero}")
                 return False
             print(f"✓ Envío probablemente exitoso a {numero}")
@@ -96,60 +100,57 @@ def enviar_mensaje(numero, nombre):
         return False
 
 try:
-    # Esperar carga inicial de WhatsApp Web
+    # Cargar Excel y mensajes 
+    wb = openpyxl.load_workbook(ARCHIVO_CONFIG)  
+    mensaje_base, mensaje_sin_nombre = cargar_mensajes(wb)
+    
     driver.get("https://web.whatsapp.com")
     WebDriverWait(driver, 45).until(
         EC.presence_of_element_located((By.XPATH, '//div[@role="textbox"]'))
     )
     
-    # Cargar Excel
-    wb = openpyxl.load_workbook(ARCHIVO_EXCEL)
-    hoja = wb.active
+    hoja_contactos = wb.active
+    if hoja_contactos.cell(row=1, column=3).value != "Estado":
+        hoja_contactos.cell(row=1, column=3, value="Estado")
     
-    # Configurar columna Estado
-    if hoja.cell(row=1, column=3).value != "Estado":
-        hoja.cell(row=1, column=3, value="Estado")
-    
-    # Determinar rango real de datos
-    ultima_fila = encontrar_ultima_fila(hoja)
-    print(f"📖 Detected last row with data: {ultima_fila}")
+    ultima_fila = encontrar_ultima_fila(hoja_contactos)
+    print(f"📖 Última fila con datos: {ultima_fila}")
     
     contador = 0
     
-    # Procesar solo filas con datos
     for fila_idx in range(2, ultima_fila + 1):
-        numero_crudo = hoja.cell(row=fila_idx, column=1).value
-        nombre = str(hoja.cell(row=fila_idx, column=2).value).strip() if hoja.cell(row=fila_idx, column=2).value else ""
+        numero_crudo = hoja_contactos.cell(row=fila_idx, column=1).value
+        nombre = str(hoja_contactos.cell(row=fila_idx, column=2).value).strip() if hoja_contactos.cell(row=fila_idx, column=2).value else ""
         
-        # Validar número
         numero_validado = validar_numero(numero_crudo)
         if not numero_validado:
-            marcar_error(fila_idx, hoja)
-            print(f"✗ Número inválido en fila {fila_idx}: {numero_crudo}")
-            wb.save(ARCHIVO_EXCEL)
+            marcar_error(fila_idx, hoja_contactos)
+            print(f"✗ Número inválido en fila {fila_idx}")
+            wb.save(ARCHIVO_CONFIG)  
             continue
             
-        # Enviar mensaje
-        if enviar_mensaje(numero_validado, nombre):
-            marcar_exito(fila_idx, hoja)
+        if enviar_mensaje(numero_validado, nombre, mensaje_base, mensaje_sin_nombre):
+            marcar_exito(fila_idx, hoja_contactos)
         else:
-            marcar_error(fila_idx, hoja)
+            marcar_error(fila_idx, hoja_contactos)
         
-        wb.save(ARCHIVO_EXCEL)
+        wb.save(ARCHIVO_CONFIG)  
         contador += 1
         
-        # Pausas estratégicas
         if contador % 50 == 0:
             print(f"⏳ Pausa de seguridad de 5 minutos...")
             time.sleep(300)
         else:
             time.sleep(random.uniform(10, 18))
 
+except Exception as e:
+    print(f"⚠ Error grave: {str(e)}")
+    
 finally:
     try:
-        wb.save(ARCHIVO_EXCEL)
+        wb.save(ARCHIVO_CONFIG)  
         wb.close()
     except Exception as e:
         print(f"⚠ Error guardando Excel: {str(e)}")
     driver.quit()
-    print("✅ Proceso finalizado correctamente")
+    print("✅ Proceso finalizado")
