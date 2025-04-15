@@ -1,7 +1,0 @@
-# Excluir todos los archivos de Excel
-*.xls
-*.xlsx
-*.xlsm
-~$*.xls*
-*.xlk
-errores/
