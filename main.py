@@ -123,7 +123,7 @@ try:
     mensaje_base, mensaje_sin_nombre = cargar_mensajes(wb)
     
     driver.get("https://web.whatsapp.com")
-    WebDriverWait(driver, 45).until(
+    WebDriverWait(driver, 180).until(
         EC.presence_of_element_located((By.XPATH, '//div[@role="textbox"]'))
     )
     
